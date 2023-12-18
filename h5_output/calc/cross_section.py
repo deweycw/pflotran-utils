@@ -1,0 +1,292 @@
+__author__ = "Christian Dewey"
+__date__ = "Dec 16, 2023"
+
+import os 
+import sys
+import h5py 
+
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.ticker import (MultipleLocator, AutoMinorLocator,AutoLocator)
+import matplotlib.colors as mcolors
+import matplotlib.cm as cm
+from matplotlib.colors import Colormap, ListedColormap
+
+from dataclasses import dataclass, field
+from warnings import warn
+
+import sys
+from pathlib import Path
+
+import pandas as pd
+import seaborn as sns
+
+from encapsulation.factory.parameters import Parameters
+from h5_output.factory.h5_output_class import HDF5Output
+
+class CrossSection(HDF5Output):
+	
+	def __init__(self, file_location,perpendicular_axis):
+		super().__init__(file_location)
+
+
+
+		self.perpendicular_axis = perpendicular_axis
+
+		self._init_settings()
+
+
+	def _init_settings(self):
+
+		self.xsection_parameters = Parameters.CrossSectionParameters
+
+
+	def get_cells(self, perp_loc = None):
+		# perp loc in m 
+
+		h5_data = self.h5_data
+
+		self.xs = np.array(h5_data['Coordinates']['X [m]'])
+		self.ys = np.array(h5_data['Coordinates']['Y [m]'])
+		self.zs = np.array(h5_data['Coordinates']['Z [m]'])
+
+		dx = self.xs[1] - self.xs[0]
+		dy = self.ys[1] - self.ys[0]
+		dz = self.zs[1] - self.zs[0]
+		self.ds= (dx,dy,dz)
+
+		self.domain_dimension = (len(self.xs)-1, len(self.ys)-1, len(self.zs)-1)
+		self.cross_section_dimension = [i for i in self.domain_dimension]
+		start_indices = [0, 0, 0]
+		end_indices = [i for i in self.domain_dimension ]
+
+		delta = u'Δ'
+		dim = 'n cells'
+		
+		dims = self.domain_dimension
+		print(f'{delta:7}  {self.ds[0]:4} {self.ds[1]:4} {self.ds[2]:4}')
+		print(f'{dim:6}  {dims[0]:4} {dims[1]:4} {dims[2]:4}')
+		if self.perpendicular_axis == 'x':
+			if self.domain_dimension[0] > 1:
+				start = int(perp_loc / dx)
+			else:
+				start = 0
+			start_indices[0] = start
+			end_indices[0] = start+1
+			del self.cross_section_dimension[0]
+			
+		elif self.perpendicular_axis == 'y':
+			if self.domain_dimension[1] > 1:
+				start = int(perp_loc / dy)
+			else:
+				start = 0
+			start_indices[1] = start
+			end_indices[1] = start+1
+			del self.cross_section_dimension[1]
+
+		elif self.perpendicular_axis == 'z':
+			if self.domain_dimension[2] > 1:
+				start = int(perp_loc / dz)
+			else:
+				start = 0
+			start_indices[2] = start
+			end_indices[2] = start+1
+			del self.cross_section_dimension[2]
+		else:
+			print('axis not recognized')
+		
+
+		self.cross_section_cells = [(i,j) for i, j in zip(start_indices,end_indices)]
+		print(f'{self.perpendicular_axis}-axis is perpendicular\ncross-section cells: x-{self.cross_section_cells[0]}, y-{self.cross_section_cells[1]}, z-{self.cross_section_cells[2]}')
+
+
+	def get_material_ids(self,show_inactive=False):
+
+		self.plot_at_time(0,'Material_ID',show_inactive)
+
+
+	def plot_at_time(self,time_t,component,show_inactive=False,show_unsat=True):
+
+		h5_data = self.h5_data
+		t_group = self.get_time_t_group(time_t)
+			
+		if t_group is not None:
+			full_set = np.array(h5_data[t_group][component])
+			if component == 'pH':
+				pH = True
+			else:
+				pH = False
+
+			inds = self.cross_section_cells
+			
+			cross_set = full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+
+			flat_shape = [i for i in np.shape(cross_set) if i != 1]	 
+			flattened_cross_set = np.reshape(cross_set,flat_shape)
+
+			if len(np.shape(flattened_cross_set)) == 2:
+				oriented_set = np.fliplr(flattened_cross_set).T
+			else:
+				oriented_set = np.flip(np.reshape(flattened_cross_set,(len(flattened_cross_set),1)))
+			
+			if show_inactive:
+				plot_set = oriented_set
+			else:
+				matid_set = np.array(h5_data[t_group]['Material_ID'])
+				matid_cross_set = matid_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+				matid_flattened_cross_set = np.reshape(matid_cross_set,flat_shape)
+				matid_oriented_set = np.fliplr(matid_flattened_cross_set).T
+				plot_set = np.ma.masked_where(matid_oriented_set == 0, oriented_set)
+				
+			if self.perpendicular_axis == 'x':
+				di = self.ds[1]
+				dj = self.ds[2]
+			elif self.perpendicular_axis == 'y':
+				di = self.ds[0]
+				dj = self.ds[2]	
+			else:
+				di = self.ds[0]
+				dj = self.ds[1]
+
+
+			fig, ax = plt.subplots()	
+			
+			#current_cmap = cm.get_cmap('viridis')
+			
+			if show_unsat is False:
+				unsat_cmap = ListedColormap(["black", "white"])
+				sat_full_set = np.array(h5_data[t_group]['Liquid_Saturation'])
+				sat_cross_set = sat_full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+				sat_flattened_cross_set = np.reshape(sat_cross_set,flat_shape)
+				sat_oriented_set = np.fliplr(sat_flattened_cross_set).T
+				sat_oriented_set[np.where(matid_oriented_set == 0)]=1
+				sat_oriented_set[np.where(sat_oriented_set != 1)] = 0
+				unsat_oriented_set = np.ma.masked_where(sat_oriented_set == 1, sat_oriented_set)
+				ax.imshow(unsat_oriented_set,cmap=unsat_cmap,alpha=0.25)
+				plot_set = np.ma.masked_where((sat_oriented_set == 0) | (matid_oriented_set == 0), oriented_set)
+				if pH:
+					mindf = np.amin(plot_set[np.isfinite(plot_set)])
+				else:
+					mindf = 0
+				maxdf = np.amax(plot_set[np.isfinite(plot_set)])
+				norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
+				ax.imshow(plot_set,cmap='viridis',norm=norm)
+			
+			else:
+				if pH:
+					mindf = np.amin(plot_set[np.isfinite(plot_set)])
+				else:
+					mindf = 0
+				maxdf = np.amax(plot_set[np.isfinite(plot_set)])
+				norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
+				ax.imshow(plot_set,cmap='viridis',norm=norm)
+
+			ax.xaxis.set_major_locator(AutoLocator())
+			x_majortick_locs = ax.get_xticks()
+			x_majortick_lbls = [f'{i*di:.0f}' for i in x_majortick_locs]
+			ax.set_xticks(x_majortick_locs)
+			ax.set_xticklabels(x_majortick_lbls)
+
+			
+			ax.yaxis.set_major_locator(AutoLocator())
+			y_majortick_locs = ax.get_yticks()
+			y_majortick_lbls = [f'{j*dj:.1f}' for j in y_majortick_locs]
+			ax.set_yticks(y_majortick_locs)
+			ax.set_yticklabels(y_majortick_lbls)
+
+			ax.set_xlim(-1,np.shape(plot_set)[1]+1)
+			ax.set_ylim(np.shape(plot_set)[0]+1,-1)
+			ax.set_xlabel('Distance (m)')
+			ax.set_ylabel('Depth below datum (m)')
+			ax.set_title(f'{component} at {time_t:.1f} h', size = 10)
+
+			sns.despine()
+
+			self._makeColorBars(plot_set,fig,pH)
+
+			fig.tight_layout()
+			plt.show()
+
+	def _makeColorBars(self, df, fig, pH=False):
+		cbar_ax = fig.add_axes([1.02, 0.32, 0.02, 0.3])
+		if pH:
+			mindf = np.amin(df[np.isfinite(df)])
+		else:
+			mindf = 0
+		maxdf = np.amax(df[np.isfinite(df)])
+
+		nValues = np.arange(mindf,maxdf)
+		norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
+		scalarmappaple = cm.ScalarMappable(norm = norm, cmap='viridis')
+		scalarmappaple.set_array(nValues)
+		
+		cb = fig.colorbar(scalarmappaple, orientation='vertical',cax=cbar_ax,shrink=0.5)
+
+
+		if pH:
+			cb_labels = [f'{i:.1f}' for i in cb.ax.get_yticks()] 
+		else:
+			cb_labels = [f'{i:.2E}' for i in cb.ax.get_yticks()]
+		cb.ax.set_yticklabels( cb_labels,size = 8 )
+		return cb
+
+	def get_component_at_cell(self,component,cell_loc,time_t):
+
+		h5_data = self.h5_data
+		t_group = self.get_time_t_group(time_t)
+			
+		if t_group is not None:
+			full_set = np.array(h5_data[t_group][component])
+
+			inds = self.cross_section_cells
+			
+			cross_set = full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+
+			flat_shape = [i for i in np.shape(cross_set) if i != 1]	 
+			flattened_cross_set = np.reshape(cross_set,flat_shape)
+
+			oriented_set = np.fliplr(flattened_cross_set).T
+		
+			return oriented_set[cell_loc[1],cell_loc[0]]
+		
+	def get_history_at_m_coords(self,component,meter_coords: tuple):
+		
+		if self.perpendicular_axis == 'x':
+			cell_loc = (int(meter_coords[0]/self.ds[1]),int(meter_coords[1]/self.ds[2]))
+		elif self.perpendicular_axis == 'y':
+			cell_loc = (int(meter_coords[0]/self.ds[0]),int(meter_coords[1]/self.ds[2]))
+		elif self.perpendicular_axis == 'z':
+			cell_loc = (int(meter_coords[0]/self.ds[0]),int(meter_coords[1]/self.ds[1]))
+
+		return self.get_history_at_cell(component, cell_loc)
+
+	def get_history_at_cell(self,component,cell_loc: tuple):
+		
+		component_history_list = [(t,self.get_component_at_cell(component,cell_loc,t)) for t in self.times]
+
+		return np.asarray(component_history_list)
+
+
+	def plot_history_at_cell(self,component,cell_loc: tuple,):
+
+		component_history_array = self.get_history_at_cell(component,cell_loc)
+		
+		ixs = component_history_array[:,0]
+		jys = component_history_array[:,1]
+		fig, ax = plt.subplots()
+
+		ax.plot(ixs, jys)
+		
+		plt.show()
+
+	def plot_history_at_m_coords(self,component,meter_coords: tuple,):
+
+		component_history_array = self.get_history_at_m_coords(component,meter_coords)
+		
+		ixs = component_history_array[:,0]
+		jys = component_history_array[:,1]
+		fig, ax = plt.subplots()
+
+		ax.plot(ixs, jys)
+		
+		plt.show()
