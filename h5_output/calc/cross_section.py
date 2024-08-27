@@ -99,13 +99,134 @@ class CrossSection(HDF5Output):
 		self.cross_section_cells = [(i,j) for i, j in zip(start_indices,end_indices)]
 		print(f'{self.perpendicular_axis}-axis is perpendicular\ncross-section cells: x-{self.cross_section_cells[0]}, y-{self.cross_section_cells[1]}, z-{self.cross_section_cells[2]}')
 
+	def get_material_ids(self,show_inactive=False, locs=None):
 
-	def get_material_ids(self,show_inactive=False):
+		self.plot_at_time(0,'Material_ID',show_inactive,locs=locs)
 
-		self.plot_at_time(0,'Material_ID',show_inactive)
+	def plot_velocity_at_time(self,time_t,perpendicular_axis, ax, show_unsat):   #,show_inactive=False,show_unsat=True
+
+		def get_oriented_vel_mats(inds, perpendicular_axis, show_unsat):
+
+			if perpendicular_axis == 'x':
+				component_in_x = "Liquid Y-Velocity [m_per_hr]"
+				component_in_y = "Liquid Z-Velocity [m_per_hr]"
+			elif perpendicular_axis == 'y':
+				component_in_x = "Liquid X-Velocity [m_per_hr]"
+				component_in_y = "Liquid Z-Velocity [m_per_hr]"		
+			elif perpendicular_axis == 'z':
+				component_in_x = "Liquid X-Velocity [m_per_hr]"
+				component_in_y = "Liquid Y-Velocity [m_per_hr]"
+
+			full_set_x = np.array(h5_data[t_group][component_in_x])
+			full_set_y = np.array(h5_data[t_group][component_in_y])
+
+			cross_set_x = full_set_x[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+			cross_set_y = full_set_y[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+
+			flat_shape_x = [i for i in np.shape(cross_set_x) if i != 1]	 
+			flat_shape_y = [i for i in np.shape(cross_set_y) if i != 1]	 
+
+			flattened_cross_set_x = np.reshape(cross_set_x,flat_shape_x)
+			flattened_cross_set_y = np.reshape(cross_set_y,flat_shape_y)
+
+			def get_oriented_set(flattened_cross_set):
+				if len(np.shape(flattened_cross_set)) == 2:
+					oriented_set = np.fliplr(flattened_cross_set).T
+				else:
+					oriented_set = np.flip(np.reshape(flattened_cross_set,(len(flattened_cross_set),1)))
+				return oriented_set
+			
+			oriented_vel_set_x = get_oriented_set(flattened_cross_set_x)
+			oriented_vel_set_y = get_oriented_set(flattened_cross_set_y)
 
 
-	def plot_at_time(self,time_t,component,show_inactive=False,show_unsat=True):
+			def get_only_saturated(flat_shape, oriented_set, show_unsat):
+
+				matid_set = np.array(h5_data[t_group]['Material_ID'])
+				matid_cross_set = matid_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+				matid_flattened_cross_set = np.reshape(matid_cross_set,flat_shape)
+				matid_oriented_set = np.fliplr(matid_flattened_cross_set).T
+
+				sat_full_set = np.array(h5_data[t_group]['Liquid_Saturation'])
+				sat_cross_set = sat_full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+				sat_flattened_cross_set = np.reshape(sat_cross_set,flat_shape)
+				sat_oriented_set = np.fliplr(sat_flattened_cross_set).T
+				sat_oriented_set[np.where(matid_oriented_set == 0)]=1
+				sat_oriented_set[np.where(sat_oriented_set != 1)] = 0
+
+				masked_set = np.ma.masked_where((sat_oriented_set == 0) | (matid_oriented_set == 0), oriented_set)
+
+				return masked_set
+			
+
+			if show_unsat == False:
+				
+				x_vel_set = get_only_saturated(flat_shape_x, oriented_vel_set_x, show_unsat)
+				y_vel_set = get_only_saturated(flat_shape_y, oriented_vel_set_y, show_unsat)
+
+				return x_vel_set, y_vel_set
+			
+			else:
+	
+				return oriented_vel_set_x, oriented_vel_set_y
+
+			
+		h5_data = self.h5_data
+		t_group = self.get_time_t_group(time_t)
+		
+		if t_group is not None:
+
+			inds = self.cross_section_cells
+	
+			oriented_vel_set_x, oriented_vel_set_y = get_oriented_vel_mats(inds,perpendicular_axis, show_unsat)
+
+			
+			nx = len(oriented_vel_set_x[0,:])
+			ny = len(oriented_vel_set_x[:,0])
+
+			m = np.meshgrid(range(nx), range(ny))
+
+			xg = m[0][0]
+			yg = m[1][:,0]
+
+			mag_mat = np.sqrt(oriented_vel_set_x**2 + oriented_vel_set_y**2)
+
+			max_mag = np.max(mag_mat)
+			lwd = mag_mat / max_mag *0.8
+			ax.streamplot(xg, yg, oriented_vel_set_x, -1* oriented_vel_set_y, color= 'white', #mag_mat, cmap = 'cividis',
+				 arrowstyle= '->',linewidth = lwd,arrowsize = 0.8,  density=(0.05,0.1), broken_streamlines=True)
+			
+			'''if self.perpendicular_axis == 'x':
+				di = self.ds[1]
+				dj = self.ds[2]
+			elif self.perpendicular_axis == 'y':
+				di = self.ds[0]
+				dj = self.ds[2]	
+			else:
+				di = self.ds[0]
+				dj = self.ds[1]
+
+			ax.xaxis.set_major_locator(AutoLocator())
+			x_majortick_locs = ax.get_xticks()
+			x_majortick_lbls = [f'{i*di:.0f}' for i in x_majortick_locs]
+			ax.set_xticks(x_majortick_locs)
+			ax.set_xticklabels(x_majortick_lbls)
+
+			ax.yaxis.set_major_locator(AutoLocator())
+			y_majortick_locs = ax.get_yticks()
+			y_majortick_lbls = [f'{j*dj:.1f}' for j in y_majortick_locs]
+			ax.set_yticks(y_majortick_locs)
+			ax.set_yticklabels(y_majortick_lbls)
+
+			ax.set_xlim(-1,np.shape(oriented_vel_set_y)[1]+1)
+			ax.set_ylim(np.shape(oriented_vel_set_y)[0]+1,-1)
+			ax.set_xlabel('Distance (m)')
+			ax.set_ylabel('Depth below datum (m)')'''
+
+			return ax
+
+
+	def plot_at_time(self,time_t,component,show_inactive=False,show_unsat=True,locs=None):
 
 		h5_data = self.h5_data
 		t_group = self.get_time_t_group(time_t)
@@ -122,99 +243,175 @@ class CrossSection(HDF5Output):
 			cross_set = full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
 
 			flat_shape = [i for i in np.shape(cross_set) if i != 1]	 
-			flattened_cross_set = np.reshape(cross_set,flat_shape)
 
-			if len(np.shape(flattened_cross_set)) == 2:
-				oriented_set = np.fliplr(flattened_cross_set).T
+			if np.shape(cross_set).count(1) > 1: # if a 1D model domain
+				flattened_cross_set = np.reshape(cross_set,(1,flat_shape[0]))
+				self._plot_1d_domain(flattened_cross_set,pH,component,time_t)
 			else:
-				oriented_set = np.flip(np.reshape(flattened_cross_set,(len(flattened_cross_set),1)))
-			
-			if show_inactive:
-				plot_set = oriented_set
-			else:
-				matid_set = np.array(h5_data[t_group]['Material_ID'])
-				matid_cross_set = matid_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
-				matid_flattened_cross_set = np.reshape(matid_cross_set,flat_shape)
-				matid_oriented_set = np.fliplr(matid_flattened_cross_set).T
-				plot_set = np.ma.masked_where(matid_oriented_set == 0, oriented_set)
+				flattened_cross_set = np.reshape(cross_set,flat_shape)
+				if len(np.shape(flattened_cross_set)) == 2:
+					oriented_set = np.fliplr(flattened_cross_set).T
+				else:
+					oriented_set = np.flip(np.reshape(flattened_cross_set,(len(flattened_cross_set),1)))
 				
-			if self.perpendicular_axis == 'x':
-				di = self.ds[1]
-				dj = self.ds[2]
-			elif self.perpendicular_axis == 'y':
-				di = self.ds[0]
-				dj = self.ds[2]	
-			else:
-				di = self.ds[0]
-				dj = self.ds[1]
-
-
-			fig, ax = plt.subplots()	
-			
-			#current_cmap = cm.get_cmap('viridis')
-			
-			if show_unsat is False:
-				unsat_cmap = ListedColormap(["black", "white"])
-				sat_full_set = np.array(h5_data[t_group]['Liquid_Saturation'])
-				sat_cross_set = sat_full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
-				sat_flattened_cross_set = np.reshape(sat_cross_set,flat_shape)
-				sat_oriented_set = np.fliplr(sat_flattened_cross_set).T
-				sat_oriented_set[np.where(matid_oriented_set == 0)]=1
-				sat_oriented_set[np.where(sat_oriented_set != 1)] = 0
-				unsat_oriented_set = np.ma.masked_where(sat_oriented_set == 1, sat_oriented_set)
-				ax.imshow(unsat_oriented_set,cmap=unsat_cmap,alpha=0.25)
-				plot_set = np.ma.masked_where((sat_oriented_set == 0) | (matid_oriented_set == 0), oriented_set)
-				if pH:
-					mindf = np.amin(plot_set[np.isfinite(plot_set)])
+				if show_inactive:
+					plot_set = oriented_set
 				else:
-					mindf = 0
-				maxdf = np.amax(plot_set[np.isfinite(plot_set)])
-				norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
-				ax.imshow(plot_set,cmap='viridis',norm=norm)
-			
-			else:
-				if pH:
-					mindf = np.amin(plot_set[np.isfinite(plot_set)])
+					matid_set = np.array(h5_data[t_group]['Material_ID'])
+					matid_cross_set = matid_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+					matid_flattened_cross_set = np.reshape(matid_cross_set,flat_shape)
+					matid_oriented_set = np.fliplr(matid_flattened_cross_set).T
+					plot_set = np.ma.masked_where(matid_oriented_set == 0, oriented_set)
+					
+				if self.perpendicular_axis == 'x':
+					di = self.ds[1]
+					dj = self.ds[2]
+				elif self.perpendicular_axis == 'y':
+					di = self.ds[0]
+					dj = self.ds[2]	
 				else:
-					mindf = 0
-				maxdf = np.amax(plot_set[np.isfinite(plot_set)])
-				norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
-				ax.imshow(plot_set,cmap='viridis',norm=norm)
+					di = self.ds[0]
+					dj = self.ds[1]
 
-			ax.xaxis.set_major_locator(AutoLocator())
-			x_majortick_locs = ax.get_xticks()
-			x_majortick_lbls = [f'{i*di:.0f}' for i in x_majortick_locs]
-			ax.set_xticks(x_majortick_locs)
-			ax.set_xticklabels(x_majortick_lbls)
 
-			
-			ax.yaxis.set_major_locator(AutoLocator())
-			y_majortick_locs = ax.get_yticks()
-			y_majortick_lbls = [f'{j*dj:.1f}' for j in y_majortick_locs]
-			ax.set_yticks(y_majortick_locs)
-			ax.set_yticklabels(y_majortick_lbls)
+				fig, ax = plt.subplots()	
+				
+				#current_cmap = cm.get_cmap('viridis')
+				
+				if show_unsat is False:
+					unsat_cmap = ListedColormap(["black", "white"])
+					sat_full_set = np.array(h5_data[t_group]['Liquid_Saturation'])
+					sat_cross_set = sat_full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+					sat_flattened_cross_set = np.reshape(sat_cross_set,flat_shape)
+					sat_oriented_set = np.fliplr(sat_flattened_cross_set).T
+					sat_oriented_set[np.where(matid_oriented_set == 0)]=1
+					sat_oriented_set[np.where(sat_oriented_set != 1)] = 0
+					unsat_oriented_set = np.ma.masked_where(sat_oriented_set == 1, sat_oriented_set)
+					ax.imshow(unsat_oriented_set,cmap=unsat_cmap,alpha=0.25)
+					plot_set = np.ma.masked_where((sat_oriented_set == 0) | (matid_oriented_set == 0), oriented_set)
+					if pH:
+						mindf = np.amin(plot_set[np.isfinite(plot_set)])
+					elif 'dG-rxn' in component:
+						mindf = np.amin(plot_set[np.isfinite(plot_set)])
+					elif 'Rate' in component:
+						#plot_set = np.log10(-1*plot_set)
+						mindf = np.amin(plot_set[np.isfinite(plot_set)])
+					else:
+						mindf = 0
+					maxdf = np.amax(plot_set[np.isfinite(plot_set)])
+					norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
+					ax.imshow(plot_set,cmap='viridis',norm=norm)
+					self.plot_velocity_at_time(time_t,'x',ax,show_unsat)
+				
+				else:
+					if pH:
+						mindf = np.amin(plot_set[np.isfinite(plot_set)])
+					elif 'dG-rxn' in component:
+						mindf = np.amin(plot_set[np.isfinite(plot_set)])
+					elif 'Rate' in component:
+						#plot_set = np.log10(-1*plot_set)
+						mindf = np.amin(plot_set[np.isfinite(plot_set)])
+					else:
+						mindf = 0
+					maxdf = np.amax(plot_set[np.isfinite(plot_set)])
 
-			ax.set_xlim(-1,np.shape(plot_set)[1]+1)
-			ax.set_ylim(np.shape(plot_set)[0]+1,-1)
-			ax.set_xlabel('Distance (m)')
-			ax.set_ylabel('Depth below datum (m)')
-			ax.set_title(f'{component} at {time_t:.1f} h', size = 10)
+					norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
+					ax.imshow(plot_set,cmap='viridis',norm=norm)
 
-			sns.despine()
+					self.plot_velocity_at_time(time_t,'x',ax,show_unsat)
 
-			self._makeColorBars(plot_set,fig,pH)
+				if locs != None:
+					xobs = [i[0]/0.5 for i in locs]
+					yobs = [i[1]/0.1 for i in locs]
+					ax.scatter(xobs, yobs,marker='o',color='r' )
 
-			fig.tight_layout()
-			plt.show()
 
-	def _makeColorBars(self, df, fig, pH=False):
+				ax.xaxis.set_major_locator(AutoLocator())
+				x_majortick_locs = ax.get_xticks()
+				x_majortick_lbls = [f'{i*di:.0f}' for i in x_majortick_locs]
+				ax.set_xticks(x_majortick_locs)
+				ax.set_xticklabels(x_majortick_lbls)
+
+				
+				ax.yaxis.set_major_locator(AutoLocator())
+				y_majortick_locs = ax.get_yticks()
+				y_majortick_lbls = [f'{j*dj:.1f}' for j in y_majortick_locs]
+				ax.set_yticks(y_majortick_locs)
+				ax.set_yticklabels(y_majortick_lbls)
+
+				ax.set_xlim(-1,np.shape(plot_set)[1]+1)
+				ax.set_ylim(np.shape(plot_set)[0]+1,-1)
+				ax.set_xlabel('Distance (m)')
+				ax.set_ylabel('Depth below datum (m)')
+				ax.set_title(f'{component} at {time_t:.1f} h', size = 10)
+
+				sns.despine()
+				
+				self._makeColorBars(plot_set,fig,component,pH)
+
+				fig.tight_layout()
+				plt.show()
+
+	def _plot_1d_domain(self,flattened_cross_set,pH, component,time_t):
+		fig, ax = plt.subplots()	
+		
+		#current_cmap = cm.get_cmap('viridis')
+		plot_set = flattened_cross_set
+		
+		if pH:
+			mindf = np.amin(plot_set[np.isfinite(plot_set)])
+		else:
+			mindf = 0
+		maxdf = np.amax(plot_set[np.isfinite(plot_set)])
+		norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
+		ax.imshow(plot_set,cmap='viridis',norm=norm)
+
+		if self.perpendicular_axis == 'x':
+			di = self.ds[1]
+			dj = self.ds[2]
+		elif self.perpendicular_axis == 'y':
+			di = self.ds[0]
+			dj = self.ds[2]	
+		else:
+			di = self.ds[0]
+			dj = self.ds[1]
+
+		ax.xaxis.set_major_locator(AutoLocator())
+		x_majortick_locs = ax.get_xticks()
+		x_majortick_lbls = [f'{i*di:.0f}' for i in x_majortick_locs]
+		ax.set_xticks(x_majortick_locs)
+		ax.set_xticklabels(x_majortick_lbls)
+
+		ax.yaxis.set_major_locator(AutoLocator())
+		y_majortick_locs = [0]
+		y_majortick_lbls = ['']
+		ax.set_yticks(y_majortick_locs)
+		ax.set_yticklabels(y_majortick_lbls)
+
+		ax.set_xlim(-1,np.shape(plot_set)[1]+1)
+		ax.set_xlabel('Distance (m)')
+		ax.set_title(f'{component} at {time_t:.1f} h', size = 10)
+
+		sns.despine()
+
+		self._makeColorBars(plot_set,fig,component,pH)
+
+		fig.tight_layout()
+		plt.show()
+
+	def _makeColorBars(self, df, fig, component, pH=False):
 		cbar_ax = fig.add_axes([1.02, 0.32, 0.02, 0.3])
 		if pH:
+			mindf = np.amin(df[np.isfinite(df)])
+		elif 'dG-rxn' in component:
+			mindf = np.amin(df[np.isfinite(df)])
+		elif 'Rate' in component:
+			#df = np.log10(-1 * df)
 			mindf = np.amin(df[np.isfinite(df)])
 		else:
 			mindf = 0
 		maxdf = np.amax(df[np.isfinite(df)])
-
+		print(mindf,maxdf)
 		nValues = np.arange(mindf,maxdf)
 		norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
 		scalarmappaple = cm.ScalarMappable(norm = norm, cmap='viridis')
@@ -265,7 +462,45 @@ class CrossSection(HDF5Output):
 		component_history_list = [(t,self.get_component_at_cell(component,cell_loc,t)) for t in self.times]
 
 		return np.asarray(component_history_list)
+	
+	def get_snapshot_all_cells(self,component, time_t, include_unsat = False):
 
+		h5_data = self.h5_data
+		t_group = self.get_time_t_group(time_t)
+			
+		if t_group is not None:
+			full_set = np.array(h5_data[t_group][component])
+
+
+			inds = self.cross_section_cells
+			
+			cross_set = full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+
+			flat_shape = [i for i in np.shape(cross_set) if i != 1]	 
+
+			flattened_cross_set = np.reshape(cross_set,flat_shape)
+			if len(np.shape(flattened_cross_set)) == 2:
+				oriented_set = np.fliplr(flattened_cross_set).T
+			else:
+				oriented_set = np.flip(np.reshape(flattened_cross_set,(len(flattened_cross_set),1)))
+			
+			matid_set = np.array(h5_data[t_group]['Material_ID'])
+			matid_cross_set = matid_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+			matid_flattened_cross_set = np.reshape(matid_cross_set,flat_shape)
+			matid_oriented_set = np.fliplr(matid_flattened_cross_set).T
+			plot_set = np.ma.masked_where(matid_oriented_set == 0, oriented_set)
+			
+			if include_unsat is False:
+				sat_full_set = np.array(h5_data[t_group]['Liquid_Saturation'])
+				sat_cross_set = sat_full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+				sat_flattened_cross_set = np.reshape(sat_cross_set,flat_shape)
+				sat_oriented_set = np.fliplr(sat_flattened_cross_set).T
+				sat_oriented_set[np.where(matid_oriented_set == 0)]=1
+				sat_oriented_set[np.where(sat_oriented_set != 1)] = 0
+				#unsat_oriented_set = np.ma.masked_where(sat_oriented_set == 1, sat_oriented_set)
+				plot_set = np.ma.masked_where((sat_oriented_set == 0) | (matid_oriented_set == 0), oriented_set)
+				
+			return plot_set
 
 	def plot_history_at_cell(self,component,cell_loc: tuple,):
 
@@ -279,14 +514,22 @@ class CrossSection(HDF5Output):
 		
 		plt.show()
 
-	def plot_history_at_m_coords(self,component,meter_coords: tuple,):
+	def plot_history_at_m_coords(self,component: str, meter_coords: tuple, ax = None):
 
 		component_history_array = self.get_history_at_m_coords(component,meter_coords)
 		
 		ixs = component_history_array[:,0]
 		jys = component_history_array[:,1]
-		fig, ax = plt.subplots()
 
-		ax.plot(ixs, jys)
+		if ax == None:
+			fig, ax = plt.subplots()
+
+			ax.plot(ixs, jys)
+			
+			plt.show()
 		
-		plt.show()
+		else:
+
+			ax.plot(ixs,jys)
+
+			return ax 
