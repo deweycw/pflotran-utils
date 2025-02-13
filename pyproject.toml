@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "pflotranutils"
+version = "0.0.3"
+
+authors = [
+    { name="Christian Dewey", email="cdewey@udel.edu" }
+    ]
+
+description = "A package for processing PFLOTRAN output"
+readme = "README.md"
+requires-python = ">=3.10"
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "scipy",
+    "pandas",
+    "h5py",
+    "seaborn"
+]
+
+
+[project.urls]
+Homepage = "https://github.com/deweycw/pflotran-utils"
+Issues = "https://github.com/deweycw/pflotran-utils/issues"
