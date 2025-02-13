@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from encapsulation.factory.parameters import Parameters
+from pflotranutils.encapsulation.factory.parameters import Parameters
 
 class HDF5Output:
 	def __init__(self, file_location):

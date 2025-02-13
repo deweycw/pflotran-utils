@@ -21,8 +21,8 @@ from pathlib import Path
 import pandas as pd
 import seaborn as sns
 
-from encapsulation.factory.parameters import Parameters
-from h5_output.factory.h5_output_class import HDF5Output
+from pflotranutils.encapsulation.factory.parameters import Parameters
+from pflotranutils.h5_output.factory.h5_output_class import HDF5Output
 
 class CrossSection(HDF5Output):
 	
@@ -301,7 +301,7 @@ class CrossSection(HDF5Output):
 					maxdf = np.amax(plot_set[np.isfinite(plot_set)])
 					norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
 					ax.imshow(plot_set,cmap='viridis',norm=norm)
-					self.plot_velocity_at_time(time_t,'x',ax,show_unsat)
+					#self.plot_velocity_at_time(time_t,'x',ax,show_unsat)
 				
 				else:
 					if pH:
@@ -318,7 +318,7 @@ class CrossSection(HDF5Output):
 					norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
 					ax.imshow(plot_set,cmap='viridis',norm=norm)
 
-					self.plot_velocity_at_time(time_t,'x',ax,show_unsat)
+					#self.plot_velocity_at_time(time_t,'x',ax,show_unsat)
 
 				if locs != None:
 					xobs = [i[0]/0.5 for i in locs]

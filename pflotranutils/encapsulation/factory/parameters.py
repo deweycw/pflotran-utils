@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from warnings import warn
 
 
-from encapsulation.factory.dataProcessing import HDF5Parameters, CrossSectionParameters
+from pflotranutils.encapsulation.factory.dataProcessing import HDF5Parameters, CrossSectionParameters
 
 class Parameters:
     HDF5Parameters = HDF5Parameters()
