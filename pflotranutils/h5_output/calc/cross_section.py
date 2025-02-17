@@ -234,7 +234,7 @@ class CrossSection(HDF5Output):
 		maxdf = np.amax(df[np.isfinite(df)])
 		return mindf,maxdf
 	
-	def plot_at_time(self,time_t,component,show_inactive=False,show_unsat=True,locs=None,ax=None,minmax=None,unit=None,plot_vel=False):
+	def plot_at_time(self,time_t,component,show_inactive=False,show_unsat=True,locs=None,ax=None,min=None,max=None,unit=None,plot_vel=False):
 
 		h5_data = self.h5_data
 		t_group = self.get_time_t_group(time_t)
@@ -292,11 +292,14 @@ class CrossSection(HDF5Output):
 					unit_factor = 1
 
 				plot_set = plot_set * unit_factor	
-				if minmax == None:
-					mindf,maxdf = self.get_min_max(plot_set,component,pH)
-				else:
-					mindf = minmax[0]
-					maxdf = minmax[1]
+				
+				mindf,maxdf = self.get_min_max(plot_set,component,pH)
+
+				if min != None:
+					mindf = min
+				if max != None: 
+					maxdf = max
+
 				print('min value for %s: %.3E' %(component, mindf))
 				print('max value for %s: %.3E' %(component, maxdf))
 				if show_unsat is False:
@@ -355,7 +358,7 @@ class CrossSection(HDF5Output):
 
 					plt.show()
 				else:
-					return ax
+					return (ax, mindf, maxdf)
 
 	def _plot_1d_domain(self,flattened_cross_set,pH, component,time_t):
 		fig, ax = plt.subplots()	
