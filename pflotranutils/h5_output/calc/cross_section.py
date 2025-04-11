@@ -37,7 +37,6 @@ class CrossSection(HDF5Output):
 
 	def get_cells(self, perp_loc = None, print_ds = False):
 		# perp loc in m 
-
 		h5_data = self.h5_data
 
 		self.xs = np.array(h5_data['Coordinates']['X [m]'])
@@ -221,8 +220,8 @@ class CrossSection(HDF5Output):
 
 			return ax
 
-	def get_min_max(self,df,component,pH):
-		if pH:
+	def get_min_max(self,df,component):
+		if 'pH' in component:
 			mindf = np.amin(df[np.isfinite(df)])
 		elif 'dG-rxn' in component:
 			mindf = np.amin(df[np.isfinite(df)])
@@ -234,7 +233,18 @@ class CrossSection(HDF5Output):
 		maxdf = np.amax(df[np.isfinite(df)])
 		return mindf,maxdf
 	
-	def plot_at_time(self,time_t,component,show_inactive=False,show_unsat=True,locs=None,ax=None,min=None,max=None,unit=None,plot_vel=False):
+	def plot_at_time(self,  
+					time_t,
+					component,
+					show_inactive=False,
+					show_unsat=True,
+					locs=None,
+					ax=None,
+					min=None,
+					max=None,
+					unit=None,
+					exp_in_unit_label=True,
+					plot_vel=False):
 
 		h5_data = self.h5_data
 		t_group = self.get_time_t_group(time_t)
@@ -253,9 +263,52 @@ class CrossSection(HDF5Output):
 			flat_shape = [i for i in np.shape(cross_set) if i != 1]	 
 
 			if np.shape(cross_set).count(1) > 1: # if a 1D model domain
+
 				flattened_cross_set = np.reshape(cross_set,(1,flat_shape[0]))
-				self._plot_1d_domain(flattened_cross_set,pH,component,time_t)
+				if len(np.shape(flattened_cross_set)) == 2:
+					oriented_set = np.fliplr(flattened_cross_set).T
+				else:
+					oriented_set = np.flip(np.reshape(flattened_cross_set,(len(flattened_cross_set),1)))
+
+				if show_inactive:
+					plot_set = oriented_set
+				else:
+					matid_set = np.array(h5_data[t_group]['Material_ID'])
+					matid_cross_set = matid_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+					matid_flattened_cross_set = np.reshape(matid_cross_set,(1,flat_shape[0]))
+					matid_oriented_set = np.fliplr(matid_flattened_cross_set).T
+					plot_set = np.ma.masked_where(matid_oriented_set == 0, oriented_set)
+					
+				if show_unsat is False:
+					sat_full_set = np.array(h5_data[t_group]['Liquid_Saturation'])
+					sat_cross_set = sat_full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
+					sat_flattened_cross_set = np.reshape(sat_cross_set,(1, flat_shape[0]))
+					sat_oriented_set = np.fliplr(sat_flattened_cross_set).T 
+					sat_oriented_set[np.where(matid_oriented_set == 0)]=1
+					sat_oriented_set[np.where(sat_oriented_set != 1)] = 0
+					unsat_oriented_set = np.ma.masked_where(sat_oriented_set == 1, sat_oriented_set)
+					plot_set = np.ma.masked_where((sat_oriented_set == 0) | (matid_oriented_set == 0), oriented_set)
+
+				else:
+					unsat_oriented_set = None
+		
+				self._plot_1d_domain(flattened_cross_set = flattened_cross_set,
+														component=component,
+														time_t=time_t,
+														show_unsat=show_unsat,
+														plot_set = plot_set,
+														unsat_oriented_set = unsat_oriented_set,
+														sat_oriented_set= sat_oriented_set,
+														locs = locs,
+														ax = ax,
+														min = min,
+														max = max,
+														unit = unit,
+														exp_in_unit_label = exp_in_unit_label,
+														plot_vel = plot_vel)
+				
 			else:
+
 				flattened_cross_set = np.reshape(cross_set,flat_shape)
 				if len(np.shape(flattened_cross_set)) == 2:
 					oriented_set = np.fliplr(flattened_cross_set).T
@@ -280,8 +333,10 @@ class CrossSection(HDF5Output):
 				else:
 					di = self.ds[0]
 					dj = self.ds[1]
-
+				
+				showax = False
 				if ax == None:
+					showax = True
 					fig, ax = plt.subplots()	
 				
 				if unit == None:
@@ -289,7 +344,7 @@ class CrossSection(HDF5Output):
 				elif unit == 'uM':
 					unit_factor = 1e6
 				elif unit == 'mM':
-					unit_factor = 1
+					unit_factor = 1e3
 
 				plot_set = plot_set * unit_factor	
 				
@@ -302,6 +357,7 @@ class CrossSection(HDF5Output):
 
 				print('min value for %s: %.3E' %(component, mindf))
 				print('max value for %s: %.3E' %(component, maxdf))
+
 				if show_unsat is False:
 					unsat_cmap = ListedColormap(["black", "white"])
 					sat_full_set = np.array(h5_data[t_group]['Liquid_Saturation'])
@@ -351,7 +407,7 @@ class CrossSection(HDF5Output):
 
 				sns.despine()
 				
-				if ax == None:
+				if showax:
 					self._makeColorBars(fig,component,mindf,maxdf,pH)
 
 					fig.tight_layout()
@@ -360,19 +416,26 @@ class CrossSection(HDF5Output):
 				else:
 					return (ax, mindf, maxdf)
 
-	def _plot_1d_domain(self,flattened_cross_set,pH, component,time_t):
-		fig, ax = plt.subplots()	
-		
-		#current_cmap = cm.get_cmap('viridis')
-		plot_set = flattened_cross_set
-		
-		if pH:
-			mindf = np.amin(plot_set[np.isfinite(plot_set)])
-		else:
-			mindf = 0
-		maxdf = np.amax(plot_set[np.isfinite(plot_set)])
-		norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
-		ax.imshow(plot_set,cmap='viridis',norm=norm)
+	def _plot_1d_domain(self, 
+						flattened_cross_set, 
+						component, 
+						time_t, 
+						show_unsat=True, 
+						unsat_oriented_set=None,
+						sat_oriented_set = None,
+						plot_set=None,
+						locs=None,
+						ax=None, 
+						min=None, 
+						max=None, 
+						unit=None, 
+						exp_in_unit_label = True,
+						plot_vel=False):
+
+		showax = False
+		if ax == None:
+			showax = True
+			fig, ax = plt.subplots()	
 
 		if self.perpendicular_axis == 'x':
 			di = self.ds[1]
@@ -383,43 +446,88 @@ class CrossSection(HDF5Output):
 		else:
 			di = self.ds[0]
 			dj = self.ds[1]
+		
 
-		ax.xaxis.set_major_locator(AutoLocator())
+	
+		if component == 'pH':
+			unit = None
+		
+		if unit == None:
+			unit_factor = 1
+		elif unit == 'uM':
+			unit_factor = 1e6
+		elif unit == 'mM':
+			unit_factor = 1e3
+
+		if len(np.shape(flattened_cross_set)) == 2:
+			oriented_set = np.fliplr(flattened_cross_set).T
+		else:
+			oriented_set = np.flip(np.reshape(flattened_cross_set,(len(flattened_cross_set),1)))
+		
+
+		plot_set = oriented_set * unit_factor	
+		
+		mindf,maxdf = self.get_min_max(plot_set,component)
+
+		if min != None:
+			mindf = min
+		if max != None: 
+			maxdf = max
+
+		print('min value for %s: %.3E' %(component, mindf))
+		print('max value for %s: %.3E' %(component, maxdf))
+
+		if show_unsat is False:
+			unsat_cmap = ListedColormap(["black", "white"])
+			norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
+			ax.imshow(unsat_oriented_set,cmap=unsat_cmap,alpha=0.5,aspect=0.2)
+			plot_set = np.ma.masked_where(sat_oriented_set == 0 , plot_set)
+			ax.imshow(plot_set,cmap='viridis',norm=norm,aspect=0.2)
+
+		else:
+			norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
+			ax.imshow(plot_set,cmap='viridis',norm=norm)
+
+		if plot_vel:
+			self.plot_velocity_at_time(time_t,'x',ax,show_unsat)
+
+		if locs != None:
+			xobs = [i[0]/0.5 for i in locs]
+			yobs = [i[1]/0.1 for i in locs]
+			ax.scatter(xobs, yobs,marker='o',color='r' )
+
+
 		x_majortick_locs = ax.get_xticks()
-		x_majortick_lbls = [f'{i*di:.0f}' for i in x_majortick_locs]
-		ax.set_xticks(x_majortick_locs)
+		x_majortick_lbls = [' ' for i in x_majortick_locs]
+		#ax.set_xticks(x_majortick_locs)
 		ax.set_xticklabels(x_majortick_lbls)
-
+		
 		ax.yaxis.set_major_locator(AutoLocator())
-		y_majortick_locs = [0]
-		y_majortick_lbls = ['']
+		y_majortick_locs = ax.get_yticks()
+		y_majortick_lbls = [f'{j*dj:.1f}' for j in y_majortick_locs]
 		ax.set_yticks(y_majortick_locs)
 		ax.set_yticklabels(y_majortick_lbls)
-
-		ax.set_xlim(-1,np.shape(plot_set)[1]+1)
-		ax.set_xlabel('Distance (m)')
+		print(np.shape(plot_set)[1]+1)
+		ax.set_xlim(-1,np.shape(plot_set)[1])
+		ax.set_ylim(np.shape(plot_set)[0]+1,-1)
+		#ax.set_xlabel('Distance (m)')
+		ax.set_ylabel('Depth below surface (m)')
 		ax.set_title(f'{component} at {time_t:.1f} h', size = 10)
 
 		sns.despine()
 		
-		self._makeColorBars(plot_set,fig,component,pH)
+		if showax:
+			self._makeColorBars(fig,mindf,maxdf,exp_in_unit_label)
 
-		fig.tight_layout()
-		plt.show()
+			fig.tight_layout()
 
-	def _makeColorBars(self, fig,mindf,maxdf, pH=False):
-		cbar_ax = fig.add_axes([1.02, 0.32, 0.02, 0.3])
-		'''if pH:
-			mindf = np.amin(df[np.isfinite(df)])
-		elif 'dG-rxn' in component:
-			mindf = np.amin(df[np.isfinite(df)])
-		elif 'Rate' in component:
-			#df = np.log10(-1 * df)
-			mindf = np.amin(df[np.isfinite(df)])
+			plt.show()
 		else:
-			mindf = 0
-		maxdf = np.amax(df[np.isfinite(df)])
-		print(mindf,maxdf)'''
+			return (ax, mindf, maxdf)
+		
+
+	def _makeColorBars(self, fig, mindf, maxdf, exp_in_unit_label):
+		cbar_ax = fig.add_axes([0.6, 0.32, 0.02, 0.3])
 		nValues = np.arange(mindf,maxdf)
 		norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
 		scalarmappaple = cm.ScalarMappable(norm = norm, cmap='viridis')
@@ -428,11 +536,10 @@ class CrossSection(HDF5Output):
 		cb = fig.colorbar(scalarmappaple, orientation='vertical',cax=cbar_ax,shrink=0.5)
 
 
-		if pH:
-			cb_labels = [f'{i:.1f}' for i in cb.ax.get_yticks()] 
-		else:
+		if exp_in_unit_label:
 			cb_labels = [f'{i:.1E}' for i in cb.ax.get_yticks()]
-
+		else:
+			cb_labels = [f'{i:.1f}' for i in cb.ax.get_yticks()] 
 
 		cb.ax.set_yticklabels( cb_labels,size = 8 )
 		return cb

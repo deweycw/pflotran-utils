@@ -1,4 +1,4 @@
-Metadata-Version: 2.2
+Metadata-Version: 2.4
 Name: pflotranutils
 Version: 0.0.3
 Summary: A package for processing PFLOTRAN output
@@ -17,3 +17,4 @@ Requires-Dist: scipy
 Requires-Dist: pandas
 Requires-Dist: h5py
 Requires-Dist: seaborn
+Dynamic: license-file
