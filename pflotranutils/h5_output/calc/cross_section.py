@@ -291,6 +291,7 @@ class CrossSection(HDF5Output):
 
 				else:
 					unsat_oriented_set = None
+					sat_oriented_set = None
 		
 				self._plot_1d_domain(flattened_cross_set = flattened_cross_set,
 														component=component,
@@ -486,7 +487,7 @@ class CrossSection(HDF5Output):
 
 		else:
 			norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
-			ax.imshow(plot_set,cmap='viridis',norm=norm)
+			ax.imshow(plot_set,cmap='viridis',norm=norm,aspect=0.2)
 
 		if plot_vel:
 			self.plot_velocity_at_time(time_t,'x',ax,show_unsat)
