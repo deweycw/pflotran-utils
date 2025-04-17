@@ -10,6 +10,8 @@ from matplotlib.colors import ListedColormap
 
 from dataclasses import dataclass, field
 from warnings import warn
+import warnings
+warnings.filterwarnings('ignore')
 
 import sys
 
@@ -251,10 +253,6 @@ class CrossSection(HDF5Output):
 			
 		if t_group is not None:
 			full_set = np.array(h5_data[t_group][component])
-			if component == 'pH':
-				pH = True
-			else:
-				pH = False
 
 			inds = self.cross_section_cells
 			
@@ -349,13 +347,11 @@ class CrossSection(HDF5Output):
 
 				plot_set = plot_set * unit_factor	
 				
-				mindf,maxdf = self.get_min_max(plot_set,component,pH)
-
+				mindf,maxdf = self.get_min_max(plot_set,component)
 				if min != None:
 					mindf = min
 				if max != None: 
 					maxdf = max
-
 				print('min value for %s: %.3E' %(component, mindf))
 				print('max value for %s: %.3E' %(component, maxdf))
 
@@ -409,7 +405,7 @@ class CrossSection(HDF5Output):
 				sns.despine()
 				
 				if showax:
-					self._makeColorBars(fig,component,mindf,maxdf,pH)
+					self._makeColorBars(fig,mindf,maxdf,exp_in_unit_label)
 
 					fig.tight_layout()
 
@@ -474,7 +470,7 @@ class CrossSection(HDF5Output):
 			mindf = min
 		if max != None: 
 			maxdf = max
-
+		
 		print('min value for %s: %.3E' %(component, mindf))
 		print('max value for %s: %.3E' %(component, maxdf))
 
@@ -528,7 +524,7 @@ class CrossSection(HDF5Output):
 		
 
 	def _makeColorBars(self, fig, mindf, maxdf, exp_in_unit_label):
-		cbar_ax = fig.add_axes([0.6, 0.32, 0.02, 0.3])
+		cbar_ax = fig.add_axes([1.01, 0.32, 0.02, 0.3])
 		nValues = np.arange(mindf,maxdf)
 		norm = mcolors.Normalize(vmin=mindf, vmax=maxdf) 
 		scalarmappaple = cm.ScalarMappable(norm = norm, cmap='viridis')
