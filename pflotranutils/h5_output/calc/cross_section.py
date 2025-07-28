@@ -26,7 +26,6 @@ class CrossSection(HDF5Output):
 		super().__init__(file_location)
 
 
-
 		self.perpendicular_axis = perpendicular_axis
 
 		self._init_settings()
@@ -557,9 +556,13 @@ class CrossSection(HDF5Output):
 			flat_shape = [i for i in np.shape(cross_set) if i != 1]	 
 			flattened_cross_set = np.reshape(cross_set,flat_shape)
 
-			oriented_set = np.fliplr(flattened_cross_set).T
-		
-			return oriented_set[cell_loc[1],cell_loc[0]]
+			if len(flat_shape) > 1:
+				
+				oriented_set = np.fliplr(flattened_cross_set).T
+			
+				return oriented_set[cell_loc[1],cell_loc[0]]
+			else:
+				return flattened_cross_set[cell_loc[0]]
 		
 	def get_history_at_m_coords(self,component,meter_coords: tuple):
 		
