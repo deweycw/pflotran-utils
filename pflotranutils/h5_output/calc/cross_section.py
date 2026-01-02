@@ -349,7 +349,7 @@ class CrossSection(HDF5Output):
 
 				plot_set = plot_set * unit_factor	
 				
-				mindf,maxdf = self.get_min_max(plot_set,component,pH)
+				mindf,maxdf = self.get_min_max(plot_set,component)
 
 				if min != None:
 					mindf = min
@@ -550,29 +550,36 @@ class CrossSection(HDF5Output):
 
 		h5_data = self.h5_data
 		t_group = self.get_time_t_group(time_t)
-			
+
 		if t_group is not None:
 			full_set = np.array(h5_data[t_group][component])
 
 			inds = self.cross_section_cells
-			
+
 			cross_set = full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
 
-			flat_shape = [i for i in np.shape(cross_set) if i != 1]	 
+			flat_shape = [i for i in np.shape(cross_set) if i != 1]
 			flattened_cross_set = np.reshape(cross_set,flat_shape)
 
-			oriented_set = np.fliplr(flattened_cross_set).T
-		
+			# Handle both 1D and 2D cross-sections
+			if len(np.shape(flattened_cross_set)) == 2:
+				oriented_set = np.fliplr(flattened_cross_set).T
+			else:
+				# 1D model (vertical column)
+				oriented_set = np.flip(np.reshape(flattened_cross_set,(len(flattened_cross_set),1)))
+
 			return oriented_set[cell_loc[1],cell_loc[0]]
 		
 	def get_history_at_m_coords(self,component,meter_coords: tuple):
-		
+
 		if self.perpendicular_axis == 'x':
 			cell_loc = (int(meter_coords[0]/self.ds[1]),int(meter_coords[1]/self.ds[2]))
 		elif self.perpendicular_axis == 'y':
 			cell_loc = (int(meter_coords[0]/self.ds[0]),int(meter_coords[1]/self.ds[2]))
 		elif self.perpendicular_axis == 'z':
 			cell_loc = (int(meter_coords[0]/self.ds[0]),int(meter_coords[1]/self.ds[1]))
+		else:
+			raise ValueError(f"Invalid perpendicular_axis: {self.perpendicular_axis}")
 
 		return self.get_history_at_cell(component, cell_loc)
 
