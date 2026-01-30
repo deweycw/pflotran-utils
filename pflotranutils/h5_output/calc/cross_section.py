@@ -448,10 +448,18 @@ class CrossSection(HDF5Output):
 			cross_set = full_set[inds[0][0]:inds[0][1],inds[1][0]:inds[1][1],inds[2][0]:inds[2][1]]
 
 			flat_shape = [i for i in np.shape(cross_set) if i != 1]	 
-			flattened_cross_set = np.reshape(cross_set,flat_shape)
 
-			oriented_set = np.fliplr(flattened_cross_set).T
-		
+
+			if np.shape(cross_set).count(1) > 1: # if a 1D model domain
+				oriented_set = np.reshape(cross_set,(1,flat_shape[0]))
+
+			else:
+				flattened_cross_set = np.reshape(cross_set,flat_shape)
+				if len(np.shape(flattened_cross_set)) == 2:
+					oriented_set = np.fliplr(flattened_cross_set).T
+				else:
+					oriented_set = np.flip(np.reshape(flattened_cross_set,(len(flattened_cross_set),1)))
+						
 			return oriented_set[cell_loc[1],cell_loc[0]]
 		
 	def get_history_at_m_coords(self,component,meter_coords: tuple):
