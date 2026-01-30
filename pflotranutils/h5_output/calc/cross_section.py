@@ -347,8 +347,8 @@ class CrossSection(HDF5Output):
 				plot_set = plot_set * unit_factor
 
 				mindf,maxdf = self.get_min_max(plot_set,component)
-
-                if min != None:
+				
+				if min != None:
 					mindf = min
 				if max != None:
 					maxdf = max
