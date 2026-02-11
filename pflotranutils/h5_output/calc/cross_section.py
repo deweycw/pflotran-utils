@@ -346,14 +346,14 @@ class CrossSection(HDF5Output):
 
                 plot_set = plot_set * unit_factor
 
-				mindf,maxdf = self.get_min_max(plot_set,component)
-				
-				if min != None:
-					mindf = min
-				if max != None:
-					maxdf = max
-				print('min value for %s: %.3E' %(component, mindf))
-				print('max value for %s: %.3E' %(component, maxdf))
+                mindf,maxdf = self.get_min_max(plot_set,component)
+
+                if min != None:
+                    mindf = min
+                if max != None:
+                    maxdf = max
+                print('min value for %s: %.3E' %(component, mindf))
+                print('max value for %s: %.3E' %(component, maxdf))
 
                 if show_unsat is False:
                     unsat_cmap = ListedColormap(["black", "white"])
