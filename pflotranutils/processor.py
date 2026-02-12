@@ -126,7 +126,8 @@ class PflotranProcessor(CrossSection):
         },
         'MC': {
             'distances': [0.5, 16, 31, 46, 60.0],
-            'depths': [1.7, 2.0, 2.1, 2.4, 2.5],
+            #'depths': [1.7, 2.0, 2.1, 2.4, 2.5],
+            'depths': [1.7,1.8,1.8,1.9,2.0],
             'loc_dist': {0.5: '1', 16: '2', 31: '3', 46: '4', 60.0: '5'},
             'obs_locs': ['MCP1-1D', 'MCP1-2D', 'MCP1-3D', 'MCP1-4D', 'MCP1-5D'],
             'loc_name': {'MCP1-1D': '1', 'MCP1-2D': '2', 'MCP1-3D': '3', 'MCP1-4D': '4', 'MCP1-5D': '5'}

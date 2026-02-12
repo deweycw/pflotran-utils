@@ -13,6 +13,7 @@ build/
 dist/
 *.egg-info/
 *.egg
+pflotranutils.egg-info/
 
 # Jupyter Notebook
 .ipynb_checkpoints/
@@ -25,8 +26,12 @@ dist/
 *~
 
 # OS
-.DS_Store
 Thumbs.db
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 
 # Office temp files
 ~$*
