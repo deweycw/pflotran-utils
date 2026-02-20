@@ -142,7 +142,9 @@ class PflotranProcessor(CrossSection):
 
     def __init__(self, h5_path: Optional[str] = None, meander: str = 'MZ',
                  perpendicular_axis: str = 'x', perp_loc: float = 0.0,
-                 project_root: Optional[Path] = None):
+                 project_root: Optional[Path] = None,
+                 distances: Optional[List[float]] = None,
+                 depths: Optional[List[float]] = None):
         """
         Initialize the processor.
 
@@ -156,6 +158,10 @@ class PflotranProcessor(CrossSection):
             perp_loc: Location along perpendicular axis in meters (default: 0.0)
             project_root: Optional project root directory for resolving relative paths.
                          If None, uses the class-level PROJECT_ROOT attribute.
+            distances: Optional list of distances along the transect. Overrides the
+                       default distances from MEANDER_CONFIG for this instance.
+            depths: Optional list of depths at each distance. Overrides the
+                    default depths from MEANDER_CONFIG for this instance.
         """
         if meander not in self.MEANDER_CONFIG:
             raise ValueError(f"Invalid meander: {meander}. Must be 'MZ' or 'MC'.")
@@ -164,7 +170,11 @@ class PflotranProcessor(CrossSection):
         self._project_root = Path(project_root) if project_root is not None else self.PROJECT_ROOT
 
         self.meander = meander
-        self.config = self.MEANDER_CONFIG[meander]
+        self.config = dict(self.MEANDER_CONFIG[meander])  # copy so overrides are per-instance
+        if distances is not None:
+            self.config['distances'] = distances
+        if depths is not None:
+            self.config['depths'] = depths
         self._h5_path_input = h5_path
         self._h5_path_resolved: Optional[Path] = None
 
@@ -331,6 +341,7 @@ class PflotranProcessor(CrossSection):
         return locs, year
 
     def get_histories(self, depths: Optional[List[float]] = None,
+                      distances: Optional[List[float]] = None,
                       components: Optional[List[str]] = None) -> Tuple[dict, np.ndarray]:
         """
         Get time series histories at all standard monitoring locations.
@@ -341,6 +352,8 @@ class PflotranProcessor(CrossSection):
         Args:
             depths: Optional list of depths for each location. If None, uses
                     the configured depths from MEANDER_CONFIG for the site.
+            distances: Optional list of distances along the transect. If None, uses
+                       the configured distances from MEANDER_CONFIG for the site.
             components: Optional list of components to extract. If None, extracts all.
 
         Returns:
@@ -352,7 +365,8 @@ class PflotranProcessor(CrossSection):
             results, times = processor.get_histories()
             fe2_at_16m = results[16]['Free_Fe++ [M]']
         """
-        distances = self.config['distances']
+        if distances is None:
+            distances = self.config['distances']
 
         if depths is None:
             # Use configured depths for each observation location
@@ -991,7 +1005,7 @@ class PflotranProcessor(CrossSection):
 
         # Extract results if not provided
         if results is None:
-            results, extracted_times = self.get_histories(depths=depths, components=[component_name])
+            results, extracted_times = self.get_histories(depths=depths, distances=distances, components=[component_name])
             times_array = extracted_times
         else:
             times_array = self.times if times is None else np.array(times)
@@ -1196,7 +1210,7 @@ class PflotranProcessor(CrossSection):
 
         # Extract results if not provided
         if results is None:
-            results, _ = self.get_histories(depths=depths, components=[component_name])
+            results, _ = self.get_histories(depths=depths, distances=distances, components=[component_name])
 
         # Infer observation component name if not provided
         if obs_component_name is None:
@@ -1446,7 +1460,7 @@ class PflotranProcessor(CrossSection):
 
         # Extract results if not provided
         if results is None:
-            results, _ = self.get_histories(depths=depths, components=[component_name])
+            results, _ = self.get_histories(depths=depths, distances=distances, components=[component_name])
 
         # Infer observation component name if not provided
         if obs_component_name is None:
@@ -2029,7 +2043,7 @@ class PflotranProcessor(CrossSection):
         if results is None:
             if not components_to_extract:
                 raise ValueError("No matching components found in simulation output")
-            results, _ = self.get_histories(depths=depths, components=components_to_extract)
+            results, _ = self.get_histories(depths=depths, distances=distances, components=components_to_extract)
 
         # Calculate KGE for each chemical component
         component_results = {}
